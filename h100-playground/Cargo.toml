@@ -1,0 +1,16 @@
+[package]
+name = "h100-playground"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.79"
+bitflags = "2.4.2"
+clap = "4.4.18"
+env_logger = "0.11.1"
+log = "0.4.20"
+nix = { version = "0.27.1", features = ["user"] }
+rustix = { version = "0.38.31", features = ["mm", "fs"] }
+x86 = "0.52.0"
