@@ -1,19 +1,59 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use anyhow::{anyhow, Result};
-use bitflags::bitflags;
 use rustix::{fd::OwnedFd, fs, io, mm};
 
-pub const NVIDIA_VENDOR_ID: u16 = 0x10de;
-pub const NVIDIA_HOPPER_H100: u16 = 0x2331;
-pub const MEM_FILE: &str = "/dev/mem";
-pub const IOMEM_FILE: &str = "/proc/iomem";
+use crate::bits::*;
 
-// Some important registers.
-pub const NV_PMC_BOOT_0: u64 = 0x0;
-pub const NV_PMC_ENABLE: u64 = 0x200;
-pub const NV_PMC_DEVICE_ENABLE: u64 = 0x600;
-pub const NV_CC_MODE: u64 = 0x1182cc;
+/// Find the GPUs by the given BDF.
+pub fn find_gpus_by_bdf(bdf: &str) -> Result<Vec<GpuObject>> {
+    let mut gpus = vec![];
+    let devices = std::fs::read_dir(PCI_DEVICES)?;
+
+    for device in devices {
+        let device = device?;
+        let path = device.path();
+        let path = path.to_string_lossy().to_string();
+
+        if path.contains(&bdf) {
+            // Check if is a nvidia GPU.
+            let vendor = std::fs::read_to_string(format!("{}/vendor", path))?;
+            if vendor.trim() == "0x10de" {
+                let class = std::fs::read_to_string(format!("{}/class", path))?;
+                if class.trim() == "0x030000"
+                    || class.trim() == "0x030200"
+                    || class.trim() == "0x068000"
+                {
+                    let mut dev = PciDevice::new(path.clone())?;
+                    dev.init_caps()?;
+                    dev.init_bars()?;
+
+                    let gpu = GpuObject::new(dev.into())?;
+                    gpus.push(gpu);
+                }
+            }
+        }
+    }
+
+    Ok(gpus)
+}
+
+pub fn find_gpus_by_name(name: String) -> Result<Vec<String>> {
+    let mut gpus = vec![];
+    let devices = std::fs::read_dir(PCI_DEVICES)?;
+
+    for device in devices {
+        let device = device?;
+        let path = device.path();
+        let path = path.to_string_lossy().to_string();
+
+        if path.contains(&name) {
+            gpus.push(path);
+        }
+    }
+
+    Ok(gpus)
+}
 
 /// A structure representing a base address register (BAR).
 #[derive(Debug, Copy, Clone, Default)]
@@ -24,15 +64,6 @@ pub struct Bar {
     pub size: u64,
     /// The type of the BAR.
     pub is_64: bool,
-}
-
-bitflags! {
-    #[derive(Debug)]
-    pub struct CcMode : u8 {
-        const CC_MODE_OFF = 0x0;
-        const CC_MODE_ON = 0x1;
-        const CC_MODE_DEV_TOOLS = 0x3;
-    }
 }
 
 /// A structure representing the configuration of a PCI device.
@@ -152,7 +183,7 @@ impl PciDevice {
 
     /// Initialize the capabilities of the PCI device.
     pub fn init_caps(&mut self) -> Result<()> {
-        if self.config.config.capabilities_pointer == 0xff {
+        if self.config.config.capabilities_pointer == CAP_ID_MASK as _ {
             return Err(anyhow!("No capabilities found"));
         }
 
@@ -184,7 +215,7 @@ impl PciDevice {
 
         let mut i = 0;
         for bar in raw_bars.iter().take(6) {
-            log::info!("BAR {}: {}", i, bar);
+            log::debug!("BAR {}: {}", i, bar);
             let bar = bar
                 .split(" ")
                 .map(|s| s.replace("0x", "").to_string())
@@ -262,13 +293,49 @@ impl GpuObject {
         Ok(())
     }
 
+    /// Reset the GPU with the OS.
+    pub fn sysfs_reset(&self) -> Result<()> {
+        let reset_path = format!("{}/{}", self.device.path, "reset");
+        let reset_fd = fs::open(reset_path, fs::OFlags::WRONLY, fs::Mode::all())?;
+        io::write(&reset_fd, b"1")?;
+
+        Ok(())
+    }
+
     pub fn query_cc_mode(&self) -> Result<CcMode> {
+        self.wait_for_boot()?;
+
         let mode = self.read8(NV_CC_MODE)?;
-        Ok(CcMode::from_bits_truncate(mode))
+        Ok(CcMode::from_bits_truncate(mode & 0b11))
     }
 
     pub fn wait_for_boot(&self) -> Result<()> {
-        Ok(())
+        self.poll_register("boot_complete", 0x200bc, 0xff, 5, 0.01, 0xffffffff)
+    }
+
+    pub fn poll_register(
+        &self,
+        name: &str,
+        offset: u64,
+        value: u32,
+        timeout: u64,
+        sleep_interval: f64,
+        mask: u32,
+    ) -> Result<()> {
+        let now = std::time::Instant::now();
+        loop {
+            if now.elapsed().as_secs() > timeout {
+                return Err(anyhow!("Timeout waiting for {}", name));
+            }
+
+            let reg = self.read32(offset)?;
+
+            if reg & mask == value {
+                return Ok(());
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs_f64(sleep_interval));
+        }
     }
 
     /// Create a new instance of `GpuObject`.

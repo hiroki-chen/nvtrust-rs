@@ -1,5 +1,5 @@
 [package]
-name = "h100-playground"
+name = "nvtrust"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.79"
 bitflags = "2.4.2"
-clap = "4.4.18"
+clap = { version = "4.4.18", features = ["derive"] }
 env_logger = "0.11.1"
 log = "0.4.20"
 nix = { version = "0.27.1", features = ["user"] }
