@@ -7,6 +7,7 @@ use log::LevelFilter;
 use nix::unistd::Uid;
 
 pub mod bits;
+pub mod cpuid;
 pub mod dev;
 
 const VERSION: &str = "535.86.06";
@@ -94,6 +95,10 @@ fn init_logger(level: LevelFilter) {
 fn main() -> Result<()> {
     let args = Args::parse();
     init_logger(args.log);
+
+    #[cfg(all(feature = "snp", target_arch = "x86_64"))]
+    cpuid::check_sev_snp()?;
+
     log::info!("NVIDIA GPU Tools version {VERSION}");
 
     if Uid::effective().is_root() {
