@@ -10,8 +10,14 @@ pub const PCI_DEVICES: &str = "/sys/bus/pci/devices";
 pub const NV_PMC_BOOT_0: u64 = 0x0;
 pub const NV_PMC_ENABLE: u64 = 0x200;
 pub const NV_PMC_DEVICE_ENABLE: u64 = 0x600;
+/// Specify the base address of the physical address of the GPU that the host wants to read
+/// through the MMIO space (see [`NV_PMC_PRAMIN_START`] - [`NV_PMC_PRAMIN_END`]).
+pub const NV_HOST_MEM: u64 = 0x1700;
 pub const NV_PROM_DATA: u64 = 0x300000;
 pub const NV_CC_MODE: u64 = 0x1182cc;
+pub const NV_PMC_PRAMIN_LEN: u64 = 1 << 20;
+pub const NV_PMC_PRAMIN_START: u64 = 0x700000;
+pub const NV_PMC_PRAMIN_END: u64 = NV_PMC_PRAMIN_START + NV_PMC_PRAMIN_LEN;
 
 pub const PCI_CFG_SPACE_SIZE: u64 = 256;
 pub const PCI_CFG_SPACE_EXP_SIZE: u64 = 4096;

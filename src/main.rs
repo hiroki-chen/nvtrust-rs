@@ -1,7 +1,7 @@
-use std::env;
+use std::{env, fs};
 
 use anyhow::Result;
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::TimestampPrecision;
 use log::LevelFilter;
 use nix::unistd::Uid;
@@ -16,7 +16,7 @@ const VERSION: &str = "535.86.06";
 #[command(name = "nvtrust")]
 #[command(author = "Haobin Hiroki Chen. <haobchen@iu.edu>")]
 #[command(version = "1.0")]
-struct Args {
+struct Cmd {
     #[clap(long, help = "Select the index of the GPU.", default_value = "-1")]
     gpu: Option<i64>,
     #[clap(
@@ -37,36 +37,45 @@ struct Args {
     no_gpu: bool,
     #[clap(long, default_value = "info")]
     log: LevelFilter,
+    // Some custom commands.
+    #[clap(subcommand)]
+    subcmd: SubCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum SubCommand {
+    #[clap(about = "Reset with OS through /sys/.../reset")]
+    ResetWithOs,
+    #[clap(about = "Query the current Confidential Computing (CC) mode of the GPU.")]
+    QueryCcMode,
     #[clap(
-        long,
-        help = "Reset with OS through /sys/.../reset",
-        default_value = "false"
+        about = "Query the current Confidential Computing (CC) settings of the GPU.\nThis prints the lower level setting knobs that will take effect upon GPU reset."
     )]
-    reset_with_os: bool,
+    QueryCcSettings,
     #[clap(
-        long,
-        help = "Query the current Confidential Computing (CC) mode of the GPU.",
-        default_value = "false"
-    )]
-    query_cc_mode: bool,
-    #[clap(
-        long,
-        help = "Query the current Confidential Computing (CC) settings of the GPU.\nThis prints the lower level setting knobs that will take effect upon GPU reset.",
-        default_value = "false"
-    )]
-    query_cc_settings: bool,
-    #[clap(
-        long,
-        help = "Configure Confidentail Computing (CC) mode. The choices are off (disabled), on (enabled) or devtools (enabled in DevTools mode).\n
+        about = "Configure Confidentail Computing (CC) mode. The choices are off (disabled), on (enabled) or devtools (enabled in DevTools mode).\n
         The GPU needs to be reset to make the selected mode active. See --reset-after-cc-mode-switch for one way of doing it."
     )]
-    set_cc_mode: Option<CcModeChoice>,
-    #[clap(
-        long,
-        help = "Reset the GPU after switching CC mode such that it is activated immediately.",
-        default_value = "false"
-    )]
-    reset_after_cc_mode_switch: bool,
+    SetCcMode { mode: CcModeChoice },
+    #[clap(about = "Reset the GPU after switching CC mode such that it is activated immediately.")]
+    ResetAfterCcModeSwitch,
+    #[clap(about = "Read the physical address in the GPU's MMIO space.")]
+    ReadPhys {
+        #[clap(long, help = "The physical address in the GPU's MMIO space.")]
+        address: u64,
+        #[clap(
+            long,
+            help = "The output of the dumped file.",
+            default_value = "dump.bin"
+        )]
+        output: String,
+        #[clap(
+            long,
+            help = "The length of the data to be read.",
+            default_value = "1048576"
+        )]
+        len: usize,
+    },
 }
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -93,7 +102,7 @@ fn init_logger(level: LevelFilter) {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let args = Cmd::parse();
     init_logger(args.log);
 
     #[cfg(all(feature = "snp", target_arch = "x86_64"))]
@@ -126,16 +135,32 @@ fn main() -> Result<()> {
             }
         };
 
-        if args.reset_with_os {
-            gpu.sysfs_reset()?;
-        }
+        log::info!("Using GPU: {}", gpu.get_name());
 
-        if args.query_cc_mode {
-            let cc_mode = gpu.query_cc_mode()?;
-            log::info!("CC settings: {:?}", cc_mode);
+        match args.subcmd {
+            SubCommand::ResetWithOs => {
+                gpu.sysfs_reset()?;
+            }
+            SubCommand::QueryCcMode => {
+                let cc_mode = gpu.query_cc_mode()?;
+                log::info!("CC mode: {:?}", cc_mode);
+            }
+            SubCommand::ReadPhys {
+                address,
+                output,
+                len,
+            } => {
+                log::info!("Reading {} bytes from 0x{:x} to {}", len, address, output);
+
+                let data = gpu.read_phys(address, len)?;
+
+                fs::write(&output, &data)?;
+                log::info!("Data written to {output}, {} bytes.", data.len());
+            }
+            _ => log::error!("Not implemented yet."),
         }
     } else {
-        log::error!("You need to be root to run this program.+");
+        log::error!("You need to be root to run this program.");
     }
 
     Ok(())

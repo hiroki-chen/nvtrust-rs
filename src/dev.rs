@@ -240,6 +240,11 @@ impl PciDevice {
 
         Ok(())
     }
+
+    #[inline]
+    pub fn get_name(&self) -> &str {
+        &self.path
+    }
 }
 
 impl GpuObject {
@@ -309,6 +314,20 @@ impl GpuObject {
         Ok(CcMode::from_bits_truncate(mode & 0b11))
     }
 
+    pub fn read_phys(&self, addr: u64, len: usize) -> Result<Vec<u8>> {
+        let mut data = vec![0u8; len];
+
+        println!("addr: 0x{:x}", self.read32(NV_HOST_MEM)?);
+        self.write32(NV_HOST_MEM, addr as u32)?;
+
+        for i in 0..len {
+            let b = self.read8(NV_PMC_PRAMIN_START + i as u64)?;
+            data[i] = b;
+        }
+
+        Ok(data)
+    }
+
     pub fn wait_for_boot(&self) -> Result<()> {
         self.poll_register("boot_complete", 0x200bc, 0xff, 5, 0.01, 0xffffffff)
     }
@@ -336,6 +355,11 @@ impl GpuObject {
 
             std::thread::sleep(std::time::Duration::from_secs_f64(sleep_interval));
         }
+    }
+
+    #[inline]
+    pub fn get_name(&self) -> &str {
+        self.device.get_name()
     }
 
     /// Create a new instance of `GpuObject`.
