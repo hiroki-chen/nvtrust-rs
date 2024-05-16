@@ -18,6 +18,7 @@ pub const NV_CC_MODE: u64 = 0x1182cc;
 pub const NV_PMC_PRAMIN_LEN: u64 = 1 << 20;
 pub const NV_PMC_PRAMIN_START: u64 = 0x700000;
 pub const NV_PMC_PRAMIN_END: u64 = NV_PMC_PRAMIN_START + NV_PMC_PRAMIN_LEN;
+pub const NV_MMIO_ERROR_PREFIX: u64 = 0xbadf;
 
 pub const PCI_CFG_SPACE_SIZE: u64 = 256;
 pub const PCI_CFG_SPACE_EXP_SIZE: u64 = 4096;

@@ -1,4 +1,4 @@
-use std::{env, fs};
+use std::{env, fs, io::Write};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
@@ -75,6 +75,25 @@ enum SubCommand {
             default_value = "1048576"
         )]
         len: usize,
+    },
+    #[clap(about = "Read the given GPU's MMIO register.")]
+    ReadMmio {
+        #[clap(long, help = "The MMIO register to read.")]
+        register: u64,
+    },
+    #[clap(about = "Read all the MMIO ranges of the given GPU.")]
+    ReadRange {
+        #[clap(short, long, help = "The begin of the range.")]
+        begin: u64,
+        #[clap(short, long, help = "The end of the range.")]
+        end: u64,
+        #[clap(short, long, help = "The output of the dumped file.")]
+        output: Option<String>,
+    },
+    #[clap(about = "Watch the given GPU's MMIO register.")]
+    Watch {
+        #[clap(long, help = "The MMIO register to watch.")]
+        register: u64,
     },
 }
 
@@ -157,6 +176,46 @@ fn main() -> Result<()> {
                 fs::write(&output, &data)?;
                 log::info!("Data written to {output}, {} bytes.", data.len());
             }
+            SubCommand::ReadMmio { register } => {
+                let val = gpu.read32(register)?;
+
+                log::info!("Register 0x{:x} = 0x{:x}", register, val);
+            }
+            SubCommand::ReadRange { begin, end, output } => {
+                let mut v = vec![];
+
+                for i in (begin..end).step_by(4) {
+                    let val = gpu.read32(i)?;
+
+                    if val != 0 {
+                        v.push((i, val));
+                    }
+                }
+
+                match output {
+                    Some(output) => {
+                        let mut f = fs::File::create(output)?;
+
+                        for (i, val) in v {
+                            let s = format!("0x{:x} = 0x{:x}\n", i, val);
+                            f.write_all(s.as_bytes())?;
+                        }
+                    }
+                    None => {
+                        for (i, val) in v {
+                            log::info!("0x{:x} = 0x{:x}", i, val);
+                        }
+                    }
+                }
+            }
+            SubCommand::Watch { register } => loop {
+                let val = gpu.read32(register)?;
+
+                // Sleep for 1 sec.
+                std::thread::sleep(std::time::Duration::from_secs(1));
+
+                log::info!("Register 0x{:x} = 0x{:x}", register, val);
+            },
             _ => log::error!("Not implemented yet."),
         }
     } else {

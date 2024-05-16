@@ -1,6 +1,8 @@
 # nvtrust-rs
 
-This is a Rust port of `nvtrust` library which is written in Python. It is still under construction.
+<s>This is a Rust port of `nvtrust` library which is written in Python. It is still under construction.</s>
+
+Not only a nvtrust!
 
 Note that this crate only supports H100 series.
 
