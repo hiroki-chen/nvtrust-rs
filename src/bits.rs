@@ -19,6 +19,9 @@ pub const NV_PMC_PRAMIN_LEN: u64 = 1 << 20;
 pub const NV_PMC_PRAMIN_START: u64 = 0x700000;
 pub const NV_PMC_PRAMIN_END: u64 = NV_PMC_PRAMIN_START + NV_PMC_PRAMIN_LEN;
 pub const NV_MMIO_ERROR_PREFIX: u64 = 0xbadf;
+// Clocks.
+pub const NV_H100_CLOCK_LOW: u64 = 0xbb0080;
+pub const NV_H100_CLOCK_HIGH: u64 = 0xbb0084;
 
 pub const PCI_CFG_SPACE_SIZE: u64 = 256;
 pub const PCI_CFG_SPACE_EXP_SIZE: u64 = 4096;
@@ -28,6 +31,31 @@ pub const PCI_CAP_ID_PM: u64 = 0x01;
 pub const PCI_EXT_CAP_ID_ERR: u64 = 0x01;
 pub const PCI_EXP_CAP_ID_SRIOV: u64 = 0x10;
 pub const CAP_ID_MASK: u64 = 0xff;
+
+bitflags! {
+    #[derive(Debug)]
+    /// NVIDIA MMIO Errors
+    pub struct NvidiaMmioErrorCode: u32 {
+        // ================================= //
+        //            Root Error             //
+        /// Nonexistent register 0xbad01XX.
+        const NONEXISTENT_REG = 0xbad00100;
+        /// VM fault when accessing memory.
+        const VM_FAULT = 0xbad0ac00;
+        // ================================= //
+
+        /// The target refused transaction.
+        const TARGET_REFUSE_TX = 0xbadf1000;
+        /// No target can handle the given MMIO address.
+        const NO_TARGET = 0xbadf1100;
+        /// Target is explicitly disabled in PMC.ENABLE.
+        const TARGET_DISABLED_PMCE = 0xbadf1200;
+        /// Target is explicitly dsiabled in PRING.
+        const TARGET_DISABLED_PRING = 0xbadf1300;
+        /// We don't know yet.
+        const OTHER_ERROR = 0xbadf5000;
+    }
+}
 
 bitflags! {
   /// The Confidential Computing (CC) mode of the GPU.
